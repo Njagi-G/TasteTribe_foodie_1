@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, ToastContainer } from "react-toastify";
@@ -55,87 +55,97 @@ const ExploreRecipes = () => {
   const [showFilters, setShowFilters] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchRecipes = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get("/api/recipes");
-        setRecipes(response.data);
-        const bookmarkStatuses = {};
-        for (const recipe of response.data) {
-          try {
-            const bookmarkResponse = await api.get(
-              `/api/recipes/${recipe.id}/bookmark`
-            );
-            bookmarkStatuses[recipe.id] = bookmarkResponse.data.bookmarked;
-          } catch (bookmarkError) {
-            if (
-              bookmarkError.response &&
-              bookmarkError.response.status === 401
-            ) {
-              console.log("User not authenticated for bookmarks");
-              bookmarkStatuses[recipe.id] = false;
-            } else {
-              console.error("Error fetching bookmark status:", bookmarkError);
-            }
+  const fetchRecipes = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await api.get("/api/recipes");
+      setRecipes(response.data);
+      const bookmarkStatuses = {};
+      const bookmarkPromises = response.data.map(async (recipe) => {
+        try {
+          const bookmarkResponse = await api.get(
+            `/api/recipes/${recipe.id}/bookmark`
+          );
+          bookmarkStatuses[recipe.id] = bookmarkResponse.data.bookmarked;
+        } catch (bookmarkError) {
+          if (bookmarkError.response && bookmarkError.response.status === 401) {
+            console.log("User not authenticated for bookmarks");
+            bookmarkStatuses[recipe.id] = false;
+          } else {
+            console.error("Error fetching bookmark status:", bookmarkError);
           }
         }
-        setBookmarkedRecipes(bookmarkStatuses);
-        setError(null);
-      } catch (error) {
-        console.error("Error fetching recipes:", error);
-        if (error.response && error.response.status === 401) {
-          setError("Unauthorized. Please log in.");
-          navigate("/login");
-        } else {
-          setError("An error occurred while fetching recipes.");
-        }
-      } finally {
-        setLoading(false);
+      });
+      await Promise.all(bookmarkPromises);
+      setBookmarkedRecipes(bookmarkStatuses);
+      setError(null);
+    } catch (error) {
+      console.error("Error fetching recipes:", error);
+      if (error.response && error.response.status === 401) {
+        setError("Unauthorized. Please log in.");
+        navigate("/login");
+      } else {
+        setError("An error occurred while fetching recipes.");
       }
-    };
-    fetchRecipes();
+    } finally {
+      setLoading(false);
+    }
   }, [navigate]);
 
-  const filteredRecipes = recipes.filter((recipe) => {
-    const searchLower = searchTerm.toLowerCase();
-    const searchFields = [
-      recipe.title,
-      recipe.chefName,
-      recipe.countryOfOrigin,
-      recipe.dietType,
-      ...(Array.isArray(recipe.ingredients)
-        ? recipe.ingredients
-        : [recipe.ingredients]),
-      recipe.instructions,
-    ];
-    const matchesSearch = searchFields.some(
-      (field) =>
-        field &&
-        typeof field === "string" &&
-        field.toLowerCase().includes(searchLower)
-    );
-    const prepTimeMinutes = extractMinutes(recipe.prepTime);
-    const servingsFilterNumber = parseInt(servingsFilter) || 0;
-    const prepTimeFilterNumber = parseInt(prepTimeFilter) || 0;
+  useEffect(() => {
+    fetchRecipes();
+  }, [fetchRecipes]);
 
-    return (
-      matchesSearch &&
-      (selectedDietType === "All" || recipe.dietType === selectedDietType) &&
-      (selectedCountry === "All" ||
-        recipe.countryOfOrigin === selectedCountry) &&
-      (ratingFilter === 0 || recipe.rating >= ratingFilter) &&
-      (servingsFilterNumber === 0 || recipe.servings >= servingsFilterNumber) &&
-      (prepTimeFilterNumber === 0 || prepTimeMinutes <= prepTimeFilterNumber)
-    );
-  });
+  const filteredRecipes = useMemo(() => {
+    return recipes.filter((recipe) => {
+      const searchLower = searchTerm.toLowerCase();
+      const searchFields = [
+        recipe.title,
+        recipe.chefName,
+        recipe.countryOfOrigin,
+        recipe.dietType,
+        ...(Array.isArray(recipe.ingredients)
+          ? recipe.ingredients
+          : [recipe.ingredients]),
+        recipe.instructions,
+      ];
+      const matchesSearch = searchFields.some(
+        (field) =>
+          field &&
+          typeof field === "string" &&
+          field.toLowerCase().includes(searchLower)
+      );
+      const prepTimeMinutes = extractMinutes(recipe.prepTime);
+      const servingsFilterNumber = parseInt(servingsFilter) || 0;
+      const prepTimeFilterNumber = parseInt(prepTimeFilter) || 0;
 
-  const countries = [
-    "All",
-    ...new Set(recipes.map((recipe) => recipe.countryOfOrigin)),
-  ];
+      return (
+        matchesSearch &&
+        (selectedDietType === "All" || recipe.dietType === selectedDietType) &&
+        (selectedCountry === "All" ||
+          recipe.countryOfOrigin === selectedCountry) &&
+        (ratingFilter === 0 || recipe.rating >= ratingFilter) &&
+        (servingsFilterNumber === 0 ||
+          recipe.servings >= servingsFilterNumber) &&
+        (prepTimeFilterNumber === 0 || prepTimeMinutes <= prepTimeFilterNumber)
+      );
+    });
+  }, [
+    recipes,
+    searchTerm,
+    selectedDietType,
+    selectedCountry,
+    ratingFilter,
+    servingsFilter,
+    prepTimeFilter,
+  ]);
 
-  const shareOnSocialMedia = (platform, recipe) => {
+  const countries = useMemo(
+    () => ["All", ...new Set(recipes.map((recipe) => recipe.countryOfOrigin))],
+    [recipes]
+  );
+
+  const shareOnSocialMedia = useCallback((platform, recipe) => {
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(`Check out this ${recipe.title} recipe!`);
     let shareUrl;
@@ -167,61 +177,70 @@ const ExploreRecipes = () => {
       draggable: true,
       progress: undefined,
     });
-  };
+  }, []);
 
-  const toggleBookmark = async (recipeId) => {
-    try {
-      if (bookmarkedRecipes[recipeId]) {
-        await api.delete(`/api/recipes/${recipeId}/bookmark`);
-        setBookmarkedRecipes({ ...bookmarkedRecipes, [recipeId]: false });
-        toast.info("Recipe removed from bookmarks!", {
-          position: "bottom-right",
-          autoClose: 2000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-        });
-      } else {
-        await api.post(`/api/recipes/${recipeId}/bookmark`);
-        setBookmarkedRecipes({ ...bookmarkedRecipes, [recipeId]: true });
-        toast.success("Recipe bookmarked!", {
-          position: "bottom-right",
-          autoClose: 2000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-        });
+  const toggleBookmark = useCallback(
+    async (recipeId) => {
+      try {
+        if (bookmarkedRecipes[recipeId]) {
+          await api.delete(`/api/recipes/${recipeId}/bookmark`);
+          setBookmarkedRecipes((prev) => ({
+            ...prev,
+            [recipeId]: false,
+          }));
+          toast.info("Recipe removed from bookmarks!", {
+            position: "bottom-right",
+            autoClose: 2000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+          });
+        } else {
+          await api.post(`/api/recipes/${recipeId}/bookmark`);
+          setBookmarkedRecipes((prev) => ({
+            ...prev,
+            [recipeId]: true,
+          }));
+          toast.success("Recipe bookmarked!", {
+            position: "bottom-right",
+            autoClose: 2000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+          });
+        }
+      } catch (error) {
+        console.error("Error toggling bookmark:", error);
+        if (error.response && error.response.status === 401) {
+          toast.error("Please log in to bookmark recipes.", {
+            position: "bottom-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+          });
+          navigate("/login");
+        } else {
+          toast.error("Failed to update bookmark. Please try again.", {
+            position: "bottom-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+          });
+        }
       }
-    } catch (error) {
-      console.error("Error toggling bookmark:", error);
-      if (error.response && error.response.status === 401) {
-        toast.error("Please log in to bookmark recipes.", {
-          position: "bottom-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-        });
-        navigate("/login");
-      } else {
-        toast.error("Failed to update bookmark. Please try again.", {
-          position: "bottom-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-        });
-      }
-    }
-  };
+    },
+    [bookmarkedRecipes, navigate]
+  );
 
   if (loading) {
     return (
