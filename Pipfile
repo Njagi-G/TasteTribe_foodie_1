@@ -1,0 +1,22 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+flask-restful = "*"
+flask-bcrypt = "*"
+firebase-admin = "*"
+flask-sqlalchemy = "*"
+flask-cors = "*"
+flask-migrate = "*"
+flask = "*"
+flask-jwt-extended = "*"
+sqlalchemy-serializer = "*"
+python-dotenv = "*"
+marshmallow = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.8"
