@@ -2,8 +2,8 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, User
 from schema.schema import UserSchema
-import os
-from werkzeug.utils import secure_filename
+import cloudinary
+import cloudinary.uploader
 
 users = Blueprint("users", __name__)
 user_schema = UserSchema()
@@ -43,24 +43,26 @@ def upload_avatar():
         return jsonify({"error": "No selected file"}), 400
 
     if file:
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
-        file.save(file_path)
+        try:
+            # Upload the file to Cloudinary
+            upload_result = cloudinary.uploader.upload(file)
 
-        # Construct the full URL for the avatar
-        avatar_url = f"{request.host_url}uploads/{filename}"
+            # Get the public URL of the uploaded image
+            avatar_url = upload_result["secure_url"]
 
-        user.profilePicture = avatar_url
-        db.session.commit()
-        return (
-            jsonify(
-                {
-                    "message": "Avatar uploaded successfully",
-                    "profilePicture": avatar_url,
-                }
-            ),
-            200,
-        )
+            user.profilePicture = avatar_url
+            db.session.commit()
+            return (
+                jsonify(
+                    {
+                        "message": "Avatar uploaded successfully",
+                        "profilePicture": avatar_url,
+                    }
+                ),
+                200,
+            )
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
 
 @users.route("/<int:id>", methods=["PUT"])

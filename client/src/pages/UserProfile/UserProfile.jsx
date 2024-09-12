@@ -177,6 +177,15 @@ const UserProfile = () => {
     }
   };
 
+  // Update the Cloudinary URL function to use transformations
+  const getCloudinaryUrl = (url, width, height) => {
+    if (!url) return "https://via.placeholder.com/150";
+    return url.replace(
+      "/upload/",
+      `/upload/c_fill,g_face,w_${width},h_${height}/`
+    );
+  };
+
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -233,12 +242,10 @@ const UserProfile = () => {
                 <div className="flex flex-col items-center">
                   <img
                     src={
-                      previewImage ||
-                      profilePicture ||
-                      "https://via.placeholder.com/150"
+                      previewImage || getCloudinaryUrl(profilePicture, 128, 128)
                     }
                     alt="Avatar"
-                    className="w-32 h-32 rounded-full border-4 border-green-100 shadow-md"
+                    className="w-32 h-32 rounded-full border-4 border-green-100 shadow-md object-cover"
                   />
                   <h2 className="text-2xl font-bold mt-6 text-gray-800">
                     {firstName} {lastName}

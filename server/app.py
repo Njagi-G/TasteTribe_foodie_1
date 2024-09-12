@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, redirect
 from flask_migrate import Migrate
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager
@@ -8,6 +8,9 @@ from config import Config
 from flask_cors import cross_origin
 import os
 from dotenv import load_dotenv
+import cloudinary
+from cloudinary.uploader import upload
+from cloudinary.utils import cloudinary_url
 
 # Load environment variables from .env file
 load_dotenv()
@@ -27,11 +30,12 @@ from routes.admin import admin
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Configure upload folder
-app.config["UPLOAD_FOLDER"] = "uploads"
-
-# Ensure the upload folder exists
-os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+# Configure Cloudinary
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+)
 
 # Initialize extensions
 db.init_app(app)
@@ -79,9 +83,11 @@ def index():
     return "Welcome to the Taste-Tribe API"
 
 
-@app.route("/uploads/<filename>")
+@app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+    # Generate a Cloudinary URL for the image
+    url, options = cloudinary_url(filename)
+    return redirect(url)
 
 
 if __name__ == "__main__":
