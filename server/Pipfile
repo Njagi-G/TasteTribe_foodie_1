@@ -16,6 +16,7 @@ sqlalchemy-serializer = "*"
 marshmallow = "*"
 python-dotenv = "*"
 gunicorn = "*"
+cloudinary = "*"
 
 [dev-packages]
 
